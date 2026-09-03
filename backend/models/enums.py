@@ -18,3 +18,10 @@ class CopyrightStatus(str, enum.Enum):
     FAIR_USE_CANDIDATE = "FAIR_USE_CANDIDATE"
     UNKNOWN = "UNKNOWN"
     UNSUITABLE = "UNSUITABLE"
+
+class SelectionStatus(str, enum.Enum):
+    UNSCORED = "UNSCORED"
+    AUTO_SELECTED = "AUTO_SELECTED"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"

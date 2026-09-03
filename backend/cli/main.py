@@ -183,5 +183,106 @@ def discover_intent(intent_id, provider):
         except ValueError as e:
             raise click.ClickException(str(e))
 
+
+@cli.command()
+@click.option('--intent-id', required=True, type=int)
+def rank_footage(intent_id):
+    """Rank footage candidates for a specific VisualIntent."""
+    from backend.services.selection.selector import FootageSelector
+    with SessionLocal() as db:
+        selector = FootageSelector(db)
+        candidates = selector.rank_intent(intent_id)
+        if not candidates:
+            click.echo(f"No candidates found for Intent {intent_id}.")
+            return
+        
+        click.echo(f"Ranked {len(candidates)} candidates for Intent {intent_id}:")
+        for m in candidates:
+            click.echo(f"  -> Asset {m.source_asset_id}: Score {m.selection_score} ({m.confidence_level})")
+
+@cli.command()
+@click.option('--intent-id', required=True, type=int)
+def select_footage(intent_id):
+    """Automatically select the best candidate and assign selection status for an intent."""
+    from backend.services.selection.selector import FootageSelector
+    with SessionLocal() as db:
+        selector = FootageSelector(db)
+        best = selector.select_best_for_intent(intent_id)
+        if not best:
+            click.echo(f"No candidates found for Intent {intent_id}.")
+            return
+        
+        click.echo(f"Best Candidate: Mapping {best.id} (Asset {best.source_asset_id})")
+        click.echo(f"Selection Status: {best.selection_status.name}")
+
+@cli.command()
+@click.option('--intent-id', required=True, type=int)
+def show_footage_candidates(intent_id):
+    """Show detailed explainable JSON output for intent candidates."""
+    from backend.models.asset_mapping import AssetMapping
+    import json
+    with SessionLocal() as db:
+        mappings = db.query(AssetMapping).filter(AssetMapping.visual_intent_id == intent_id).all()
+        if not mappings:
+            click.echo(f"No candidates found for Intent {intent_id}.")
+            return
+            
+        for m in mappings:
+            click.echo(f"\n--- Mapping {m.id} (Asset {m.source_asset_id}) ---")
+            click.echo(f"Score: {m.selection_score} ({m.confidence_level})")
+            click.echo(f"Status: {m.selection_status.name if hasattr(m, 'selection_status') else 'UNSCORED'}")
+            if m.selection_reason:
+                try:
+                    reason_dict = json.loads(m.selection_reason)
+                    click.echo(json.dumps(reason_dict, indent=2))
+                except:
+                    click.echo(m.selection_reason)
+            else:
+                click.echo("No selection reason available.")
+
+@cli.command()
+@click.option('--mapping-id', required=True, type=int)
+def create_clip_plan(mapping_id):
+    """Creates a clip plan for a mapping if valid timestamps are available."""
+    from backend.services.selection.planner import ClipPlanner
+    from backend.models.asset_mapping import AssetMapping
+    with SessionLocal() as db:
+        mapping = db.query(AssetMapping).filter(AssetMapping.id == mapping_id).first()
+        if not mapping:
+            click.echo("Mapping not found.")
+            return
+            
+        planner = ClipPlanner()
+        start, end, t_conf, t_reason = planner.plan_clip(mapping, mapping.source_asset)
+        
+        mapping.start_timestamp = start
+        mapping.end_timestamp = end
+        mapping.timestamp_confidence = t_conf
+        mapping.timestamp_reason = t_reason
+        db.commit()
+        
+        click.echo(f"Clip plan created for Mapping {mapping.id}:")
+        click.echo(f"  Start: {start}")
+        click.echo(f"  End: {end}")
+        click.echo(f"  Confidence: {t_conf}")
+        click.echo(f"  Reason: {t_reason}")
+
+@cli.command()
+@click.option('--mapping-id', required=True, type=int)
+def show_clip_plan(mapping_id):
+    """Shows the clip plan for a mapping."""
+    from backend.models.asset_mapping import AssetMapping
+    with SessionLocal() as db:
+        mapping = db.query(AssetMapping).filter(AssetMapping.id == mapping_id).first()
+        if not mapping:
+            click.echo("Mapping not found.")
+            return
+            
+        click.echo(f"Clip Plan for Mapping {mapping.id}:")
+        click.echo(f"  Start: {mapping.start_timestamp}")
+        click.echo(f"  End: {mapping.end_timestamp}")
+        click.echo(f"  Confidence: {mapping.timestamp_confidence}")
+        click.echo(f"  Reason: {mapping.timestamp_reason}")
 if __name__ == "__main__":
     cli()
+

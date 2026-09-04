@@ -283,6 +283,215 @@ def show_clip_plan(mapping_id):
         click.echo(f"  End: {mapping.end_timestamp}")
         click.echo(f"  Confidence: {mapping.timestamp_confidence}")
         click.echo(f"  Reason: {mapping.timestamp_reason}")
-if __name__ == "__main__":
-    cli()
+@cli.command()
+@click.option('--project-id', required=True, type=int)
+@click.option('--topic', required=False, type=str, help="Sets the project topic for the research plan.")
+def research_plan(project_id, topic):
+    from backend.services.research.plan import ResearchPlanner
+    from backend.models.project import Project
+    with SessionLocal() as db:
+        project = db.query(Project).filter_by(id=project_id).first()
+        if not project:
+            click.echo("Project not found.")
+            return
+            
+        if topic:
+            project.topic = topic
+            db.commit()
+            
+        use_topic = project.topic or project.name
+        
+        planner = ResearchPlanner()
+        plan = planner.generate_plan(use_topic)
+        click.echo(f"Research Plan for '{use_topic}':")
+        for p in plan:
+            click.echo(f"  - [{p['category']}] {p['query']}")
 
+@cli.command()
+@click.option('--project-id', required=True, type=int)
+def research(project_id):
+    from backend.services.research.engine import ResearchEngine
+    from backend.services.research.wikipedia_provider import WikipediaDiscoveryProvider, WikipediaRetrievalProvider
+    from backend.services.research.ddg_provider import DuckDuckGoDiscoveryProvider, WebScraperRetrievalProvider
+    from backend.services.research.composite_provider import CompositeRetrievalProvider
+    from backend.services.research.extractor import AdvancedHeuristicExtractor
+    from backend.models.project import Project
+    
+    with SessionLocal() as db:
+        project = db.query(Project).filter_by(id=project_id).first()
+        if not project:
+            click.echo("Project not found.")
+            return
+            
+        wiki_disc = WikipediaDiscoveryProvider()
+        ddg_disc = DuckDuckGoDiscoveryProvider()
+        
+        retrieval = CompositeRetrievalProvider(WikipediaRetrievalProvider(), WebScraperRetrievalProvider())
+        extractor = AdvancedHeuristicExtractor()
+        
+        engine = ResearchEngine(db, [wiki_disc, ddg_disc], retrieval, extractor)
+        run = engine.create_run(project_id, {"query": project.topic or project.name})
+        click.echo(f"Created Research Run {run.id}")
+        
+        click.echo("Executing research plan...")
+        engine.execute_plan(run.id)
+        
+        from backend.models.research_source import ResearchSource
+        sources = db.query(ResearchSource).filter_by(discovered_in_run_id=run.id).all()
+        click.echo(f"Discovered {len(sources)} sources. Retrieving...")
+        
+        for src in sources:
+            engine.retrieve_source(src.id)
+            engine.process_source_claims(run.id, src.id)
+            
+        engine.complete_run(run.id)
+        click.echo(f"Completed Research Run {run.id}")
+
+@cli.command()
+@click.option('--run-id', required=True, type=int)
+def research_status(run_id):
+    from backend.models.research_run import ResearchRun
+    with SessionLocal() as db:
+        run = db.query(ResearchRun).filter_by(id=run_id).first()
+        if not run:
+            click.echo("Run not found.")
+            return
+        click.echo(f"Run {run.id} Status: {run.status.name}")
+        click.echo(f"Stats: {run.stats}")
+
+@cli.command()
+@click.option('--run-id', required=True, type=int)
+def research_sources(run_id):
+    from backend.models.research_source import ResearchSource
+    with SessionLocal() as db:
+        sources = db.query(ResearchSource).filter_by(discovered_in_run_id=run_id).all()
+        for src in sources:
+            click.echo(f"Source {src.id}: {src.title} ({src.url}) - [{src.scope}] Tier {src.reliability_tier} - {src.retrieval_status.name}")
+
+@cli.command()
+@click.option('--run-id', required=True, type=int)
+def research_claims(run_id):
+    from backend.models.research_claim import ResearchClaim
+    with SessionLocal() as db:
+        claims = db.query(ResearchClaim).filter_by(research_run_id=run_id).all()
+        for claim in claims:
+            click.echo(f"Claim {claim.id} [{claim.status.name} | Conf: {claim.confidence}]: {claim.claim_text}")
+
+@cli.command()
+@click.option('--claim-id', required=True, type=int)
+def research_evidence(claim_id):
+    from backend.models.research_claim import ResearchClaim
+    with SessionLocal() as db:
+        claim = db.query(ResearchClaim).filter_by(id=claim_id).first()
+        if not claim:
+            click.echo("Claim not found.")
+            return
+        click.echo(f"Evidence for Claim {claim.id} (Confidence: {claim.confidence} - {claim.confidence_reason}):")
+        for ev in claim.evidence:
+            src = ev.source
+            click.echo(f"  -> Source {ev.source_id} [{src.scope} | {src.reliability_tier}] [{ev.evidence_type.name}]: {ev.raw_text}")
+
+
+
+
+
+@cli.command()
+@click.option('--run-id', required=True, type=int)
+def research_quality(run_id):
+    from backend.models.research_source import ResearchSource
+    from backend.models.research_claim import ResearchClaim
+    from backend.models.enums import ClaimStatus
+    with SessionLocal() as db:
+        # Sources
+        sources = db.query(ResearchSource).filter_by(discovered_in_run_id=run_id).all()
+        tiers = {}
+        scopes = {}
+        syndicated = 0
+        for s in sources:
+            tiers[s.reliability_tier] = tiers.get(s.reliability_tier, 0) + 1
+            scopes[s.scope] = scopes.get(s.scope, 0) + 1
+            if s.is_syndicated:
+                syndicated += 1
+                
+        # Claims
+        claims = db.query(ResearchClaim).filter_by(research_run_id=run_id).all()
+        confidences = {}
+        categories = {}
+        statuses = {}
+        qualities = {}
+        for c in claims:
+            confidences[c.confidence] = confidences.get(c.confidence, 0) + 1
+            categories[c.category] = categories.get(c.category, 0) + 1
+            statuses[c.status.name] = statuses.get(c.status.name, 0) + 1
+            qualities[c.quality_classification] = qualities.get(c.quality_classification, 0) + 1
+            
+        click.echo(f"--- RESEARCH QUALITY REPORT [RUN {run_id}] ---")
+        click.echo(f"\nSOURCES: {len(sources)} total ({syndicated} syndicated)")
+        click.echo("Tiers:")
+        for k, v in tiers.items(): click.echo(f"  {k}: {v}")
+        click.echo("Scopes:")
+        for k, v in scopes.items(): click.echo(f"  {k}: {v}")
+        
+        click.echo(f"\nCLAIMS: {len(claims)} total")
+        click.echo("Confidences:")
+        for k, v in confidences.items(): click.echo(f"  {k}: {v}")
+        click.echo("Statuses:")
+        for k, v in statuses.items(): click.echo(f"  {k}: {v}")
+        click.echo("Quality Classifications:")
+        for k, v in qualities.items(): click.echo(f"  {k}: {v}")
+        
+        click.echo("\nCOVERAGE BY CATEGORY:")
+        for k, v in categories.items(): click.echo(f"  {k}: {v} claims")
+
+
+@cli.command()
+@click.option("--project-id", type=int, required=True)
+@click.option("--research-run-id", type=int, required=True)
+def story_build(project_id, research_run_id):
+    from backend.services.story.builder import StoryBuilder
+    from backend.models import Episode, Project, ResearchRun
+    
+    from backend.database.db import get_db
+    db = next(get_db())
+    
+    project = db.query(Project).get(project_id)
+    r_run = db.query(ResearchRun).get(research_run_id)
+    
+    episode = db.query(Episode).filter_by(project_id=project_id).first()
+    if not episode:
+        episode = Episode(project_id=project_id, name="Auto-generated Episode")
+        db.add(episode)
+        db.commit()
+        
+    builder = StoryBuilder(db)
+    story_run_id = builder.build_story(project_id, episode.id, research_run_id)
+    click.echo(f"StoryRun {story_run_id} built successfully.")
+
+@cli.command()
+@click.option("--story-run-id", type=int, required=True)
+def story_quality(story_run_id):
+    from backend.models import StoryRun
+    from backend.database.db import get_db
+    db = next(get_db())
+    run = db.query(StoryRun).get(story_run_id)
+    click.echo(f"Quality: {run.quality_score}")
+    click.echo(f"Stats: {run.stats}")
+
+@cli.command()
+@click.option("--story-run-id", type=int, required=True)
+def story_scenes(story_run_id):
+    from backend.models import Scene, NarrationSegment, VisualIntent
+    from backend.database.db import get_db
+    db = next(get_db())
+    scenes = db.query(Scene).filter_by(story_run_id=story_run_id).order_by(Scene.order_index).all()
+    for s in scenes:
+        click.echo(f"Scene {s.order_index}: {s.title} [Purpose: {s.purpose}]")
+        for n in s.narration_segments:
+            click.echo(f"  Narration: {n.text} (Duration: {n.estimated_duration_seconds}s)")
+            for vi in n.visual_intents:
+                click.echo(f"    Visual: {vi.description}")
+
+
+
+if __name__ == '__main__':
+    cli()

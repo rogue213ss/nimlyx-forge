@@ -25,3 +25,58 @@ class SelectionStatus(str, enum.Enum):
     NEEDS_REVIEW = "NEEDS_REVIEW"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
+
+class ResearchRunStatus(str, enum.Enum):
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    INTERRUPTED = "INTERRUPTED"
+
+class RetrievalStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    SUCCESS = "SUCCESS"
+    HTTP_ERROR = "HTTP_ERROR"
+    TIMEOUT = "TIMEOUT"
+    MALFORMED = "MALFORMED"
+    BLOCKED = "BLOCKED"
+    NOT_FOUND = "NOT_FOUND"
+
+class ClaimStatus(str, enum.Enum):
+    UNVERIFIED = "UNVERIFIED"
+    SINGLE_SOURCE = "SINGLE_SOURCE"
+    CORROBORATED = "CORROBORATED"
+    CONFLICTED = "CONFLICTED"
+    REJECTED = "REJECTED"
+
+class EvidenceType(str, enum.Enum):
+    SUPPORTING = "SUPPORTING"
+    CONTRADICTING = "CONTRADICTING"
+    NEUTRAL = "NEUTRAL"
+
+class StoryRunStatus(str, enum.Enum):
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+class DatePrecision(str, enum.Enum):
+    EXACT_DATE = "EXACT_DATE"
+    MONTH = "MONTH"
+    YEAR = "YEAR"
+    DATE_RANGE = "DATE_RANGE"
+    RELATIVE = "RELATIVE"
+    UNKNOWN = "UNKNOWN"
+
+class NarrativeRole(str, enum.Enum):
+    HOOK = "HOOK"
+    SETUP = "SETUP"
+    CONTEXT = "CONTEXT"
+    RISING_TENSION = "RISING_TENSION"
+    TURNING_POINT = "TURNING_POINT"
+    CRISIS = "CRISIS"
+    FALLOUT = "FALLOUT"
+    LOW_POINT = "LOW_POINT"
+    DISCOVERY = "DISCOVERY"
+    TRANSFORMATION = "TRANSFORMATION"
+    PAYOFF = "PAYOFF"
+    REFLECTION = "REFLECTION"
+    CONCLUSION = "CONCLUSION"

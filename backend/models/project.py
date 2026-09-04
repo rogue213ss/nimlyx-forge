@@ -8,6 +8,7 @@ class Project(Base):
     id = Column(Integer, primary_key=True, index=True)
     channel_id = Column(Integer, ForeignKey("channels.id"), index=True, nullable=False)
     name = Column(String, nullable=False)
+    topic = Column(String, nullable=True)
 
     channel = relationship("Channel", back_populates="projects")
     episodes = relationship("Episode", back_populates="project", cascade="all, delete-orphan")

@@ -47,3 +47,10 @@ fix_alembic.py
 fix_indexes.py
 add_fail_intent.py
 evaluate_queries.py
+fix_*.py
+test_ddg*.py
+test_engine.py
+test_prov*.py
+test_scope.py
+test_wiki.py
+ffmpeg/

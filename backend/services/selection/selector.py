@@ -6,6 +6,29 @@ from sqlalchemy.orm import Session
 from backend.models.asset_mapping import AssetMapping
 
 class FootageSelector:
+    """
+    V6 corrective patch (see docs/phase-reports/v6.md):
+
+    Automated selection may never overwrite a mapping whose selection_status
+    is APPROVED. APPROVED represents an explicit human editorial decision,
+    and is the only SelectionStatus value currently protected this way.
+    A mapping in this state is left completely untouched by rank_intent()
+    and select_best_for_intent() -- its selection_score, selection_reason,
+    confidence_level, selection_status, and clip-plan timestamp fields are
+    all skipped. This holds across repeated calls, rescoring, new candidates
+    being introduced for the same intent, and re-ordering caused by any of
+    the above -- there is no code path in this class that can touch an
+    APPROVED mapping's stored fields.
+
+    REJECTED is NOT treated as protected. As of this patch, nothing in the
+    codebase distinguishes a system-generated REJECTED from a human-issued
+    one (there is no separate "editorial rejection" flag or status), and
+    every current writer of REJECTED is this selector acting on a
+    confidence score. Making REJECTED sticky here would therefore be
+    guessing at an editorial-intent model that does not exist yet. This is
+    tracked as technical debt -- see docs/phase-reports/v6.md.
+    """
+
     def __init__(self, db: Session):
         self.db = db
         self.scorer = SelectionScorer()
@@ -18,6 +41,11 @@ class FootageSelector:
 
         scored_mappings = []
         for m in mappings:
+            if m.selection_status == SelectionStatus.APPROVED:
+                # Protected editorial decision: never rescore, never touch.
+                scored_mappings.append(m)
+                continue
+
             source = m.source_asset
             intent = m.visual_intent
             
@@ -70,6 +98,11 @@ class FootageSelector:
         best = ranked[0]
         
         for m in ranked:
+            if m.selection_status == SelectionStatus.APPROVED:
+                # Protected editorial decision: skip status change and clip
+                # (re-)planning entirely. Do not touch this mapping.
+                continue
+
             # We don't change AssetState. Only SelectionStatus.
             if m.confidence_level == "REJECTED":
                 m.selection_status = SelectionStatus.REJECTED

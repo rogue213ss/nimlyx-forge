@@ -14,3 +14,6 @@ from .research_evidence import ResearchEvidence
 
 from .story import StoryRun, StoryAct, StoryEvent, StoryBeat, StoryEventClaim, StoryBeatClaim
 
+
+from .script import ScriptRun, ScriptSentence, ClaimReference
+

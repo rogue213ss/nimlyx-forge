@@ -3,7 +3,7 @@ import urllib.parse
 from typing import List, Dict, Any
 from backend.services.research.providers import SourceDiscoveryProvider, SourceRetrievalProvider, ClaimExtractor
 
-USER_AGENT = 'NimlyxForgeBot/1.0 (ResearchEngine; backend)'
+USER_AGENT = 'NimlyxForgeBot/1.0 (testuser123@example.com)'
 
 class WikipediaDiscoveryProvider(SourceDiscoveryProvider):
     def discover(self, query: str, **kwargs) -> List[Dict[str, Any]]:
@@ -45,6 +45,7 @@ class WikipediaRetrievalProvider(SourceRetrievalProvider):
         title = urllib.parse.unquote(parsed.path.split('/')[-1])
         
         api_url = f"https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&titles={urllib.parse.quote(title)}&format=json"
+        import time; time.sleep(1.5)
         res = requests.get(api_url, headers=headers)
         res.raise_for_status()
         data = res.json()

@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 import click
 from backend.database.db import SessionLocal
 from backend.database.init_db import init_db
@@ -452,7 +454,7 @@ def story_build(project_id, research_run_id):
     from backend.models import Episode, Project, ResearchRun
     
     from backend.database.db import get_db
-    db = next(get_db())
+    db = SessionLocal()
     
     project = db.query(Project).get(project_id)
     r_run = db.query(ResearchRun).get(research_run_id)
@@ -472,7 +474,7 @@ def story_build(project_id, research_run_id):
 def story_quality(story_run_id):
     from backend.models import StoryRun
     from backend.database.db import get_db
-    db = next(get_db())
+    db = SessionLocal()
     run = db.query(StoryRun).get(story_run_id)
     click.echo(f"Quality: {run.quality_score}")
     click.echo(f"Stats: {run.stats}")
@@ -482,7 +484,7 @@ def story_quality(story_run_id):
 def story_scenes(story_run_id):
     from backend.models import Scene, NarrationSegment, VisualIntent
     from backend.database.db import get_db
-    db = next(get_db())
+    db = SessionLocal()
     scenes = db.query(Scene).filter_by(story_run_id=story_run_id).order_by(Scene.order_index).all()
     for s in scenes:
         click.echo(f"Scene {s.order_index}: {s.title} [Purpose: {s.purpose}]")
@@ -491,6 +493,125 @@ def story_scenes(story_run_id):
             for vi in n.visual_intents:
                 click.echo(f"    Visual: {vi.description}")
 
+
+
+
+@cli.command()
+@click.option('--story-run-id', type=int, required=True)
+def script_build(story_run_id):
+    from backend.database.db import get_db
+    db = SessionLocal()
+    from backend.services.script.writer import ScriptWriter
+    writer = ScriptWriter(db)
+    script_id = writer.generate_script(story_run_id)
+    click.echo(f"ScriptRun {script_id} generated successfully.")
+
+@cli.command()
+@click.option('--script-run-id', type=int, required=True)
+def script_status(script_run_id):
+    from backend.database.db import get_db
+    db = SessionLocal()
+    from backend.models.script import ScriptRun
+    run = db.query(ScriptRun).get(script_run_id)
+    if not run:
+        click.echo("Not found")
+        return
+    click.echo(f"ScriptRun {run.id} Status: {run.status}")
+
+@cli.command()
+@click.option('--script-run-id', type=int, required=True)
+def script_show(script_run_id):
+    from backend.database.db import get_db
+    db = SessionLocal()
+    from backend.models.script import ScriptSentence
+    sentences = db.query(ScriptSentence).filter_by(script_run_id=script_run_id).order_by(ScriptSentence.id).all()
+    for s in sentences:
+        click.echo(f"[{s.sentence_type}] {s.text}")
+
+@cli.command()
+@click.option('--script-run-id', type=int, required=True)
+def script_provenance(script_run_id):
+    from backend.database.db import get_db
+    db = SessionLocal()
+    from backend.models.script import ScriptSentence, ClaimReference
+    from backend.models import ResearchClaim, ResearchEvidence
+    sentences = db.query(ScriptSentence).filter_by(script_run_id=script_run_id).order_by(ScriptSentence.id).all()
+    for s in sentences:
+        click.echo(f"\nSentence #{s.id}: {s.text}")
+        refs = db.query(ClaimReference).filter_by(script_sentence_id=s.id).all()
+        for r in refs:
+            c = db.query(ResearchClaim).get(r.research_claim_id)
+            evs = db.query(ResearchEvidence).filter_by(claim_id=c.id).all()
+            for ev in evs:
+                click.echo(f" -> Claim #{c.id}: {c.claim_text}")
+                click.echo(f"    Evidence #{ev.id} (Source #{ev.source_id})")
+
+@cli.command()
+@click.option('--script-run-id', type=int, required=True)
+def script_review(script_run_id):
+    from backend.database.db import get_db
+    db = SessionLocal()
+    from backend.models.script import ScriptSentence
+    from backend.models.enums import ReviewStatus
+    sentences = db.query(ScriptSentence).filter_by(script_run_id=script_run_id).all()
+    for s in sentences:
+        s.review_status = ReviewStatus.APPROVED.value
+    db.commit()
+    click.echo(f"ScriptRun {script_run_id} approved explicitly.")
+
+
+@cli.command()
+@click.option('--story-run-id', type=int, required=True)
+def llm_script_build(story_run_id):
+    db = SessionLocal()
+    from backend.services.script.llm_writer import LLMScriptWriter
+    writer = LLMScriptWriter(db)
+    try:
+        s_id = writer.generate_script(story_run_id)
+        click.echo(f"LLM ScriptRun {s_id} generated successfully.")
+    except Exception as e:
+        click.echo(f"Failed to generate LLM script: {e}", err=True)
+
+@cli.command()
+@click.option('--script-run-id', type=int, required=True)
+def llm_script_show(script_run_id):
+    db = SessionLocal()
+    from backend.models.script import ScriptSentence
+    sents = db.query(ScriptSentence).filter_by(script_run_id=script_run_id).order_by(ScriptSentence.id).all()
+    for s in sents:
+        click.echo(f"[{s.sentence_type}] ({s.review_status}) {s.text}")
+
+@cli.command()
+@click.option('--script-run-id', type=int, required=True)
+def llm_script_status(script_run_id):
+    db = SessionLocal()
+    from backend.models.script import ScriptRun, ScriptSentence
+    sr = db.query(ScriptRun).get(script_run_id)
+    sents = db.query(ScriptSentence).filter_by(script_run_id=script_run_id).count()
+    click.echo(f"LLM ScriptRun: {sr.id} | Status: {sr.status} | Sentences: {sents} | Provider: {sr.provider_name} | Tokens: {sr.token_usage}")
+
+@cli.command()
+@click.option('--script-run-id', type=int, required=True)
+def llm_script_provenance(script_run_id):
+    db = SessionLocal()
+    from backend.models.script import ScriptSentence, ClaimReference
+    sents = db.query(ScriptSentence).filter_by(script_run_id=script_run_id).order_by(ScriptSentence.id).all()
+    for s in sents:
+        click.echo(f"\nSentence: {s.text}")
+        refs = db.query(ClaimReference).filter_by(script_sentence_id=s.id).all()
+        if not refs:
+            click.echo("  [NO REFERENCES]")
+        for r in refs:
+            click.echo(f"  -> Claim #{r.research_claim_id}")
+
+@cli.command()
+@click.option('--script-run-id', type=int, required=True)
+def llm_script_review(script_run_id):
+    db = SessionLocal()
+    from backend.models.script import ScriptSentence
+    from backend.models.enums import ReviewStatus
+    sents = db.query(ScriptSentence).filter_by(script_run_id=script_run_id, review_status=ReviewStatus.NEEDS_REVIEW.value).all()
+    click.echo(f"Found {len(sents)} sentences needing review.")
 
 
 if __name__ == '__main__':

@@ -80,3 +80,22 @@ class NarrativeRole(str, enum.Enum):
     PAYOFF = "PAYOFF"
     REFLECTION = "REFLECTION"
     CONCLUSION = "CONCLUSION"
+
+class ScriptRunStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+class SentenceType(str, enum.Enum):
+    FACTUAL = "FACTUAL"
+    TRANSITION = "TRANSITION"
+    RHETORICAL = "RHETORICAL"
+    DESCRIPTIVE = "DESCRIPTIVE"
+    EDITORIAL = "EDITORIAL"
+
+class ReviewStatus(str, enum.Enum):
+    DRAFT = "DRAFT"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"

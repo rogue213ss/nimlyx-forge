@@ -48,8 +48,14 @@ class AdvancedHeuristicExtractor(ClaimExtractor):
                     
             if found_category:
                 ev_reasons = []
-                topic_name = topic.replace(" game", "").replace(" video game", "").lower().strip()
-                if topic_name and topic_name in s_lower:
+                topic_raw = topic.replace(" game", "").replace(" video game", "").lower()
+                topic_name = re.sub(r'[^\w\s]', '', topic_raw)
+                topic_name = re.sub(r'\s+', ' ', topic_name).strip()
+                
+                s_clean = re.sub(r'[^\w\s]', '', s_lower)
+                s_clean = re.sub(r'\s+', ' ', s_clean).strip()
+                
+                if topic_name and topic_name in s_clean:
                     ev_reasons.append("Contains target entity")
                 else:
                     ev_reasons.append("Does not explicitly name target entity")

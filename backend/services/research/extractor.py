@@ -1,4 +1,4 @@
-import re
+﻿import re
 import json
 from typing import List, Dict, Any
 from backend.services.research.providers import ClaimExtractor
@@ -15,11 +15,11 @@ class AdvancedHeuristicExtractor(ClaimExtractor):
         claims = []
         
         # Clean out wikipedia references like [12], [citation needed]
-        text = re.sub(r'\[\d+\]', '', text)
-        text = re.sub(r'\[citation needed\]', '', text)
+        text_clean = re.sub(r'\[\d+\]', '', text)
+        text_clean = re.sub(r'\[citation needed\]', '', text_clean)
         
-        text = text.replace('\n', ' ')
-        sentences = re.split(r'(?<=[.!?]) +(?=[A-Z0-9])', text)
+        text_flat = text_clean.replace('\n', ' ')
+        sentences = re.split(r'(?<=[.!?]) +(?=[A-Z0-9])', text_flat)
         
         keywords = {
             "development": ["develop", "engine", "studio", "director", "programmer", "budget", "cost", "team", "patch", "update"],
@@ -27,6 +27,15 @@ class AdvancedHeuristicExtractor(ClaimExtractor):
             "sales": ["sold", "million", "copies", "revenue", "grossed", "units"],
             "reception": ["received", "reviews", "critic", "score", "metacritic", "award", "won", "nominated"]
         }
+        
+        topic_raw = topic.replace(" game", "").replace(" video game", "").lower()
+        topic_name = re.sub(r'[^\w\s]', '', topic_raw)
+        topic_name = re.sub(r'\s+', ' ', topic_name).strip()
+        
+        # Check if the document as a whole establishes topic context
+        doc_clean = re.sub(r'[^\w\s]', '', text_clean.lower())
+        doc_clean = re.sub(r'\s+', ' ', doc_clean).strip()
+        document_has_topic = bool(topic_name and topic_name in doc_clean)
         
         for s in sentences:
             s = s.strip()
@@ -48,14 +57,13 @@ class AdvancedHeuristicExtractor(ClaimExtractor):
                     
             if found_category:
                 ev_reasons = []
-                topic_raw = topic.replace(" game", "").replace(" video game", "").lower()
-                topic_name = re.sub(r'[^\w\s]', '', topic_raw)
-                topic_name = re.sub(r'\s+', ' ', topic_name).strip()
                 
                 s_clean = re.sub(r'[^\w\s]', '', s_lower)
                 s_clean = re.sub(r'\s+', ' ', s_clean).strip()
                 
-                if topic_name and topic_name in s_clean:
+                sentence_has_topic = bool(topic_name and topic_name in s_clean)
+                
+                if sentence_has_topic or document_has_topic:
                     ev_reasons.append("Contains target entity")
                 else:
                     ev_reasons.append("Does not explicitly name target entity")
@@ -73,9 +81,9 @@ class AdvancedHeuristicExtractor(ClaimExtractor):
                 if numeric_match:
                     ev_reasons.append("Contains specific numeric data")
                     
-                # To prevent claim explosion of useless boilerplate, we require it to have
-                # either the target entity, a date, or a number.
-                if not any(r in ev_reasons for r in ["Contains target entity", "Contains explicit temporal marker", "Contains specific numeric data"]):
+                # RELEVANCE FIREWALL: Date/number/financial signals can never independently satisfy topic relevance.
+                # A claim must first establish a credible connection to the target topic/entity.
+                if "Contains target entity" not in ev_reasons:
                     continue
                 
                 ev_quality = "LOW"
@@ -131,3 +139,4 @@ class AdvancedHeuristicExtractor(ClaimExtractor):
                     })
                 
         return claims
+

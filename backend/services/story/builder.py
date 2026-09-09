@@ -69,11 +69,11 @@ class StoryBuilder:
                 reasons.append("Tier 1/2 corroboration")
                 
             text = (getattr(claim, 'claim_text', None) or "").lower()
-            if re.search(r'(19|20)\d{2}', text):
+            if re.search(r'\b(19|20)\d{2}\b', text):
                 score += 30
                 reasons.append("major timeline event")
                 
-            if re.search(r'\d+(?:\.\d+)?\s*(million|billion|copies|dollars|sales)', text):
+            if re.search(r'\b\d+(?:\.\d+)?\s*(million|billion|copies|dollars|sales)\b', text):
                 score += 20
                 reasons.append("scale/financial indicator")
                 
@@ -92,25 +92,17 @@ class StoryBuilder:
                     topic_name = re.sub(r'[^\w\s]', '', topic_raw)
                     topic_name = re.sub(r'\s+', ' ', topic_name).strip()
                     
-                    # Split into meaningful words to check context, excluding common stop words
-                    stops = {"the", "and", "for", "with"}
-                    topic_words = set([w for w in topic_name.split() if len(w) > 3 and w not in stops])
+                    text_clean = re.sub(r'[^\w\s]', '', text).strip()
                     
-                    text_clean = re.sub(r'[^\w\s]', '', text).strip() # text is already lowercased
-                    
+                    # HARDENED: Require exact normalized topic name. No partial word fallbacks.
                     if topic_name and topic_name in text_clean:
-                        has_relevance = True
-                    elif topic_words and any(w in text_clean for w in topic_words):
-                        # Strict check for partial match: if it's just "vegas", make sure we actually 
-                        # have strong reason, or we'll let real estate facts through.
-                        # Actually, we shouldn't fallback to partial words on old claims.
-                        # But to be safe and let valid claims through, let's keep it but require it's an exact match of a distinct word like "fallout" or "obsidian"
-                        # We can't know the studio, so just use topic_words.
                         has_relevance = True
             
             if score >= 30 and has_relevance:
                 claim._selection_reason = ", ".join(reasons)
                 selected.append(claim)
+
+
 
 
                 

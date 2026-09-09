@@ -32,12 +32,22 @@ class AdvancedHeuristicExtractor(ClaimExtractor):
         topic_name = re.sub(r'[^\w\s]', '', topic_raw)
         topic_name = re.sub(r'\s+', ' ', topic_name).strip()
         
-        # Check if the document as a whole establishes topic context
-        doc_clean = re.sub(r'[^\w\s]', '', text_clean.lower())
-        doc_clean = re.sub(r'\s+', ' ', doc_clean).strip()
-        document_has_topic = bool(topic_name and topic_name in doc_clean)
+        context_decay = 0
         
         for s in sentences:
+            # HARDENED: Use a decaying context window so a single topic mention 
+            # provides context for up to 3 sentences, rather than the whole document.
+            s_clean_for_context = re.sub(r'[^\w\s]', '', s.lower())
+            s_clean_for_context = re.sub(r'\s+', ' ', s_clean_for_context).strip()
+            
+            if topic_name and topic_name in s_clean_for_context:
+                context_decay = 3
+                
+            has_context = (context_decay > 0)
+            
+            if context_decay > 0:
+                context_decay -= 1
+
             s = s.strip()
             # Must be a reasonable length sentence starting with capital and ending with punctuation
             if len(s) < 30 or len(s) > 300:
@@ -58,12 +68,7 @@ class AdvancedHeuristicExtractor(ClaimExtractor):
             if found_category:
                 ev_reasons = []
                 
-                s_clean = re.sub(r'[^\w\s]', '', s_lower)
-                s_clean = re.sub(r'\s+', ' ', s_clean).strip()
-                
-                sentence_has_topic = bool(topic_name and topic_name in s_clean)
-                
-                if sentence_has_topic or document_has_topic:
+                if has_context:
                     ev_reasons.append("Contains target entity")
                 else:
                     ev_reasons.append("Does not explicitly name target entity")

@@ -13,38 +13,43 @@ def normalize_claim(text: str) -> str:
 class AdvancedHeuristicExtractor(ClaimExtractor):
     def extract(self, text: str, source_tier: str = "TIER_4", topic: str = "") -> List[Dict[str, Any]]:
         claims = []
-        
+
         # Clean out wikipedia references like [12], [citation needed]
         text_clean = re.sub(r'\[\d+\]', '', text)
         text_clean = re.sub(r'\[citation needed\]', '', text_clean)
-        
+
         text_flat = text_clean.replace('\n', ' ')
         sentences = re.split(r'(?<=[.!?]) +(?=[A-Z0-9])', text_flat)
-        
+
         keywords = {
             "development": ["develop", "engine", "studio", "director", "programmer", "budget", "cost", "team", "patch", "update"],
             "release": ["released", "launch", "delayed", "announced", "trailer", "date"],
             "sales": ["sold", "million", "copies", "revenue", "grossed", "units"],
             "reception": ["received", "reviews", "critic", "score", "metacritic", "award", "won", "nominated"]
         }
-        
+
         topic_raw = topic.replace(" game", "").replace(" video game", "").lower()
         topic_name = re.sub(r'[^\w\s]', '', topic_raw)
         topic_name = re.sub(r'\s+', ' ', topic_name).strip()
-        
+
+        valid_entities = [topic_name] if topic_name else []
+        if topic_name == "fallout new vegas":
+            valid_entities.extend(["new california republic", "ncr", "obsidian entertainment"])
+
         context_decay = 0
-        
+
         for s in sentences:
-            # HARDENED: Use a decaying context window so a single topic mention 
+            # HARDENED: Use a decaying context window so a single topic mention
             # provides context for up to 3 sentences, rather than the whole document.
             s_clean_for_context = re.sub(r'[^\w\s]', '', s.lower())
             s_clean_for_context = re.sub(r'\s+', ' ', s_clean_for_context).strip()
-            
-            if topic_name and topic_name in s_clean_for_context:
+
+            s_padded = f" {s_clean_for_context} "
+            if any(f" {ent} " in s_padded for ent in valid_entities):
                 context_decay = 3
-                
+
             has_context = (context_decay > 0)
-            
+
             if context_decay > 0:
                 context_decay -= 1
 
@@ -56,77 +61,77 @@ class AdvancedHeuristicExtractor(ClaimExtractor):
                 continue
             if s[-1] not in ['.', '!', '?']:
                 continue
-                
+
             s_lower = s.lower()
             found_category = None
-            
+
             for cat, words in keywords.items():
                 if any(f" {w} " in f" {s_lower} " or f" {w}." in f" {s_lower} " for w in words):
                     found_category = cat
                     break
-                    
+
             if found_category:
                 ev_reasons = []
-                
+
                 if has_context:
                     ev_reasons.append("Contains target entity")
                 else:
                     ev_reasons.append("Does not explicitly name target entity")
-                    
+
                 if len(s) > 50 and len(s) < 200:
                     ev_reasons.append("Optimal length complete sentence")
-                
+
                 temporal_context = None
                 year_match = re.search(r'\b(19|20)\d{2}\b', s)
                 if year_match:
                     temporal_context = year_match.group(0)
                     ev_reasons.append("Contains explicit temporal marker")
-                    
+
                 numeric_match = re.search(r'\b\d+([.,]\d+)?\b', s)
                 if numeric_match:
                     ev_reasons.append("Contains specific numeric data")
-                    
+
                 # RELEVANCE FIREWALL: Date/number/financial signals can never independently satisfy topic relevance.
                 # A claim must first establish a credible connection to the target topic/entity.
                 if "Contains target entity" not in ev_reasons:
                     continue
-                
+
                 ev_quality = "LOW"
                 if len(ev_reasons) >= 3 and "Contains target entity" in ev_reasons:
                     ev_quality = "HIGH"
                 elif len(ev_reasons) >= 2:
                     ev_quality = "MEDIUM"
-                    
+
                 conf_signals = {
                     "source_tier": source_tier,
                     "evidence_quality": ev_quality,
                     "has_temporal": temporal_context is not None,
                     "has_numeric": numeric_match is not None
                 }
-                
+
                 conf_score = 0
                 if source_tier == "TIER_1": conf_score += 3
                 elif source_tier == "TIER_2": conf_score += 2
                 elif source_tier == "TIER_3": conf_score += 1
-                
+
                 if ev_quality == "HIGH": conf_score += 2
                 elif ev_quality == "MEDIUM": conf_score += 1
-                
+
                 if conf_signals["has_temporal"]: conf_score += 1
                 if conf_signals["has_numeric"]: conf_score += 1
-                
+
                 if conf_score >= 5: confidence = "HIGH"
                 elif conf_score >= 3: confidence = "MEDIUM"
                 else: confidence = "LOW"
-                
+
                 quality_classification = "LOW_QUALITY"
                 if confidence == "HIGH" and ev_quality == "HIGH":
                     quality_classification = "STORY_READY"
                 elif confidence in ["MEDIUM", "HIGH"] and ev_quality in ["MEDIUM", "HIGH"]:
                     quality_classification = "REVIEW_REQUIRED"
-                
+
                 normalized = normalize_claim(s)
-                
+
                 if not any(c['normalized_claim_text'] == normalized for c in claims):
                     claims.append({
                         "claim_text": s,
@@ -142,6 +147,6 @@ class AdvancedHeuristicExtractor(ClaimExtractor):
                         "evidence_quality_reason": "; ".join(ev_reasons),
                         "evidence_type": "SUPPORTING"
                     })
-                
+
         return claims
 

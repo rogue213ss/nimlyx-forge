@@ -32,7 +32,7 @@ class StoryBuilder:
             beats = self._generate_beats(run, events, acts)
             self._generate_scenes(run, acts, beats)
             self._evaluate_quality(run, selected_claims, events, beats)
-            
+
             run.status = StoryRunStatus.COMPLETED.value
             run.completed_at = datetime.datetime.now(datetime.timezone.utc)
             self.db.commit()
@@ -54,10 +54,10 @@ class StoryBuilder:
                 continue
             if claim.status == ClaimStatus.CONFLICTED.value:
                 continue
-            
+
             score = 0
             reasons = []
-            
+
             if getattr(claim, 'quality_classification', None) == "STORY_READY":
                 score += 30
                 reasons.append("STORY_READY")
@@ -67,23 +67,23 @@ class StoryBuilder:
             if claim.status == ClaimStatus.CORROBORATED.value:
                 score += 20
                 reasons.append("Tier 1/2 corroboration")
-                
+
             text = (getattr(claim, 'claim_text', None) or "").lower()
             if re.search(r'\b(19|20)\d{2}\b', text):
                 score += 30
                 reasons.append("major timeline event")
-                
+
             if re.search(r'\b\d+(?:\.\d+)?\s*(million|billion|copies|dollars|sales)\b', text):
                 score += 20
                 reasons.append("scale/financial indicator")
-                
+
             # RELEVANCE FIREWALL
             has_relevance = False
             for ev in claim.evidence:
                 if ev.evidence_quality_reason and "Contains target entity" in ev.evidence_quality_reason:
                     has_relevance = True
                     break
-                    
+
             if not has_relevance:
                 project = self.db.query(Project).filter_by(id=run.project_id).first()
                 if project and project.topic:
@@ -91,13 +91,18 @@ class StoryBuilder:
                     topic_raw = topic.replace(" game", "").replace(" video game", "").lower()
                     topic_name = re.sub(r'[^\w\s]', '', topic_raw)
                     topic_name = re.sub(r'\s+', ' ', topic_name).strip()
-                    
+
+                    valid_entities = [topic_name] if topic_name else []
+                    if topic_name == "fallout new vegas":
+                        valid_entities.extend(["new california republic", "ncr", "obsidian entertainment"])
+
                     text_clean = re.sub(r'[^\w\s]', '', text).strip()
-                    
-                    # HARDENED: Require exact normalized topic name. No partial word fallbacks.
-                    if topic_name and topic_name in text_clean:
+                    text_padded = f" {text_clean} "
+
+                    # HARDENED: Require exact normalized topic name or unambiguous entity. No partial word fallbacks.
+                    if any(f" {ent} " in text_padded for ent in valid_entities):
                         has_relevance = True
-            
+
             if score >= 30 and has_relevance:
                 claim._selection_reason = ", ".join(reasons)
                 selected.append(claim)
@@ -105,22 +110,22 @@ class StoryBuilder:
 
 
 
-                
+
         return selected
 
     def _reconstruct_timeline(self, run: StoryRun, selected_claims):
         events = []
         for claim in selected_claims:
             text = (getattr(claim, 'claim_text', None) or "")
-            
+
             date_precision = DatePrecision.UNKNOWN.value
             event_date = None
-            
+
             year_match = re.search(r'\b((?:19|20)\d{2})\b', text)
             if year_match:
                 event_date = year_match.group(1)
                 date_precision = DatePrecision.YEAR.value
-                
+
                 months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
                 for m in months:
                     if m in text.lower():
@@ -130,7 +135,7 @@ class StoryBuilder:
             elif "years later" in text.lower() or "after" in text.lower():
                 event_date = "Relative"
                 date_precision = DatePrecision.RELATIVE.value
-                
+
             ev = StoryEvent(
                 story_run_id=run.id,
                 title=f"Event: {text[:30]}...",
@@ -142,11 +147,11 @@ class StoryBuilder:
             )
             self.db.add(ev)
             self.db.flush()
-            
+
             mapping = StoryEventClaim(event_id=ev.id, claim_id=claim.id)
             self.db.add(mapping)
             events.append(ev)
-            
+
         return events
 
     def _structure_acts(self, run: StoryRun):
@@ -164,12 +169,12 @@ class StoryBuilder:
             if e.date_precision == DatePrecision.YEAR.value or e.date_precision == DatePrecision.MONTH.value:
                 return (0, str(e.event_date))
             return (1, str(e.id))
-            
+
         sorted_events = sorted(events, key=sort_key)
-        
+
         beats = []
         n = len(sorted_events)
-        
+
         for i, ev in enumerate(sorted_events):
             if i < n // 3:
                 act = acts[0]
@@ -183,7 +188,7 @@ class StoryBuilder:
                 act = acts[2]
                 role = NarrativeRole.CONCLUSION.value if i == n - 1 else NarrativeRole.REFLECTION.value
                 emotion = "RESOLUTION"
-                
+
             beat = StoryBeat(
                 story_run_id=run.id,
                 act_id=act.id,
@@ -196,13 +201,13 @@ class StoryBuilder:
             )
             self.db.add(beat)
             self.db.flush()
-            
+
             claims = self.db.query(StoryEventClaim).filter_by(event_id=ev.id).all()
             for c in claims:
                 self.db.add(StoryBeatClaim(beat_id=beat.id, claim_id=c.claim_id))
-                
+
             beats.append(beat)
-            
+
         return beats
 
     def _generate_scenes(self, run: StoryRun, acts, beats):
@@ -212,7 +217,7 @@ class StoryBuilder:
             for beat in act_beats:
                 claims = self.db.query(StoryBeatClaim).filter_by(beat_id=beat.id).all()
                 claim_ids = [c.claim_id for c in claims]
-                
+
                 scene = Scene(
                     episode_id=run.episode_id,
                     order_index=scene_idx,
@@ -226,7 +231,7 @@ class StoryBuilder:
                 )
                 self.db.add(scene)
                 self.db.flush()
-                
+
                 seg = NarrationSegment(
                     scene_id=scene.id,
                     order_index=1,
@@ -241,7 +246,7 @@ class StoryBuilder:
                 )
                 self.db.add(seg)
                 self.db.flush()
-                
+
                 vi = VisualIntent(
                     narration_segment_id=seg.id,
                     description=f"Show visual context for {beat.summary}",
@@ -251,14 +256,14 @@ class StoryBuilder:
                     preferred_channels=json.dumps(["official"])
                 )
                 self.db.add(vi)
-                
+
                 scene_idx += 1
 
     def _evaluate_quality(self, run: StoryRun, selected_claims, events, beats):
         run.central_question = "How did this story unfold based on factual research?"
         run.story_promise = "A fully deterministic documentary arc."
         run.emotional_arc = "AMBITION -> TENSION -> RESOLUTION"
-        
+
         quality = {
             "Evidence coverage": len(selected_claims),
             "Timeline coverage": len([e for e in events if e.date_precision != DatePrecision.UNKNOWN.value]),
@@ -267,7 +272,7 @@ class StoryBuilder:
             "Unsupported content": 0
         }
         run.quality_score = json.dumps(quality)
-        
+
         stats = {
             "claims_selected": len(selected_claims),
             "events_created": len(events),

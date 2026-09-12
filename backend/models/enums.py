@@ -93,6 +93,7 @@ class SentenceType(str, enum.Enum):
     RHETORICAL = "RHETORICAL"
     DESCRIPTIVE = "DESCRIPTIVE"
     EDITORIAL = "EDITORIAL"
+    NARRATION = "NARRATION"
 
 class ReviewStatus(str, enum.Enum):
     DRAFT = "DRAFT"

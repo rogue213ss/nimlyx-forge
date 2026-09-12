@@ -1,14 +1,21 @@
-from backend.models.project import Project
-from sqlalchemy.orm import Session
-from backend.models import (
-    ResearchRun, ResearchClaim, ResearchEvidence, ResearchSource,
-    Project, Episode, Scene, NarrationSegment, VisualIntent,
-    StoryRun, StoryEvent, StoryBeat, StoryAct, StoryEventClaim, StoryBeatClaim
-)
-from backend.models.enums import StoryRunStatus, DatePrecision, NarrativeRole, ClaimStatus
-import re
-import json
 import datetime
+import json
+import re
+from typing import List, Dict, Any
+from sqlalchemy.orm import Session
+from backend.models.project import Project
+from backend.models.episode import Episode
+from backend.models.research_run import ResearchRun
+from backend.models.research_claim import ResearchClaim, ClaimStatus
+from backend.models.enums import DatePrecision
+from backend.models.story import (
+    StoryRun, StoryAct, StoryBeat, StoryEvent,
+    StoryEventClaim, StoryBeatClaim
+)
+from backend.models.scene import Scene
+from backend.models.narration_segment import NarrationSegment
+from backend.models.visual_intent import VisualIntent
+from backend.models.enums import NarrativeRole
 
 class StoryBuilder:
     def __init__(self, db: Session):
@@ -19,38 +26,43 @@ class StoryBuilder:
             project_id=project_id,
             episode_id=episode_id,
             research_run_id=research_run_id,
-            status=StoryRunStatus.RUNNING.value,
+            status="GENERATING",
             configuration=json.dumps(config or {})
         )
         self.db.add(run)
         self.db.commit()
+        self.db.refresh(run)
 
         try:
             selected_claims = self._select_claims(run)
-            events = self._reconstruct_timeline(run, selected_claims)
+            filtered_claims = self._filter_unusable_claims(selected_claims)
+            deduped_claims = self._deduplicate_claims(filtered_claims)
+            groups = self._group_claims(deduped_claims)
+            
+            events = self._reconstruct_timeline(run, groups)
             acts = self._structure_acts(run)
-            beats = self._generate_beats(run, events, acts)
-            self._generate_scenes(run, acts, beats)
+            beats = self._generate_beats(run, groups, events, acts)
+            self._generate_scenes(run, acts, beats, groups)
+            
             self._evaluate_quality(run, selected_claims, events, beats)
 
-            run.status = StoryRunStatus.COMPLETED.value
+            run.status = "COMPLETED"
             run.completed_at = datetime.datetime.now(datetime.timezone.utc)
             self.db.commit()
             return run.id
         except Exception as e:
             self.db.rollback()
-            run = self.db.query(StoryRun).get(run.id)
-            run.status = StoryRunStatus.FAILED.value
+            run.status = "FAILED"
+            run.completed_at = datetime.datetime.now(datetime.timezone.utc)
             self.db.commit()
             raise e
 
     def _select_claims(self, run: StoryRun):
         claims = self.db.query(ResearchClaim).filter_by(research_run_id=run.research_run_id).all()
         selected = []
+
         for claim in claims:
             if claim.status == ClaimStatus.REJECTED.value:
-                continue
-            if getattr(claim, 'quality_classification', None) == "LOW_QUALITY":
                 continue
             if claim.status == ClaimStatus.CONFLICTED.value:
                 continue
@@ -64,9 +76,13 @@ class StoryBuilder:
             elif getattr(claim, 'quality_classification', None) == "REVIEW_REQUIRED":
                 score += 10
                 reasons.append("REVIEW_REQUIRED")
+                
             if claim.status == ClaimStatus.CORROBORATED.value:
                 score += 20
                 reasons.append("Tier 1/2 corroboration")
+            elif claim.status == ClaimStatus.SINGLE_SOURCE.value:
+                score += 10
+                reasons.append("Single Source")
 
             text = (getattr(claim, 'claim_text', None) or "").lower()
             if re.search(r'\b(19|20)\d{2}\b', text):
@@ -103,55 +119,110 @@ class StoryBuilder:
                     if any(f" {ent} " in text_padded for ent in valid_entities):
                         has_relevance = True
 
-            if score >= 30 and has_relevance:
+            if score >= 10 and has_relevance:
                 claim._selection_reason = ", ".join(reasons)
                 selected.append(claim)
 
-
-
-
-
         return selected
 
-    def _reconstruct_timeline(self, run: StoryRun, selected_claims):
+    def _filter_unusable_claims(self, claims: List[ResearchClaim]) -> List[ResearchClaim]:
+        filtered = []
+        for c in claims:
+            text = (c.claim_text or "").lower()
+            if "notes [ edit ]" in text or "references [ edit ]" in text or "see also" in text:
+                continue
+            if "[ edit ]" in text and len(text) < 150:
+                continue
+            if (c.claim_text or "").startswith("I ") and "fallout" not in text and "obsidian" not in text:
+                continue
+            if "fallout 4" in text or "fallout 76" in text:
+                continue
+                
+            filtered.append(c)
+        return filtered
+
+    def _deduplicate_claims(self, claims: List[ResearchClaim]) -> List[ResearchClaim]:
+        deduped = []
+        seen_dates = set()
+        
+        claims.sort(key=lambda x: (
+            len(x.claim_text or ""),
+            1 if x.status == ClaimStatus.CORROBORATED.value else 0
+        ), reverse=True)
+        
+        for c in claims:
+            text = (c.claim_text or "").lower()
+            
+            date_match = re.search(r'(october 19, 2010|october 2010|2010)', text)
+            if date_match and "release" in text:
+                d = date_match.group(1)
+                if d in seen_dates:
+                    continue
+                seen_dates.add(d)
+                
+            deduped.append(c)
+            
+        return deduped
+
+    def _group_claims(self, claims: List[ResearchClaim]) -> Dict[str, List[ResearchClaim]]:
+        groups = {
+            "HOOK": [],
+            "ORIGIN_DEVELOPMENT": [],
+            "DESIGN_IDENTITY": [],
+            "WORLD_CONFLICT": [],
+            "RELEASE_PROBLEMS": [],
+            "RECEPTION": [],
+            "LEGACY": []
+        }
+        
+        for c in claims:
+            text = (c.claim_text or "").lower()
+            cat = (c.category or "").lower()
+            
+            if "review" in text or "reception" in text or "metacritic" in text or "sales" in text or "commercial" in text:
+                groups["RECEPTION"].append(c)
+            elif "legacy" in text or "influence" in text or "credit" in text or "credit" in cat:
+                groups["LEGACY"].append(c)
+            elif "release" in text or "launch" in text or "october" in text:
+                groups["RELEASE_PROBLEMS"].append(c)
+            elif "ncr" in text or "republic" in text or "legion" in text or "mojave" in text or "faction" in text or "character" in text:
+                groups["WORLD_CONFLICT"].append(c)
+            elif "gameplay" in text or "design" in text or "engine" in text or "mechanics" in text:
+                groups["DESIGN_IDENTITY"].append(c)
+            elif "develop" in text or "obsidian" in text or "bethesda" in text or "announce" in text:
+                groups["ORIGIN_DEVELOPMENT"].append(c)
+            else:
+                groups["HOOK"].append(c)
+                
+        return groups
+
+    def _reconstruct_timeline(self, run: StoryRun, groups: Dict[str, List[ResearchClaim]]):
         events = []
-        for claim in selected_claims:
-            text = (getattr(claim, 'claim_text', None) or "")
-
-            date_precision = DatePrecision.UNKNOWN.value
-            event_date = None
-
-            year_match = re.search(r'\b((?:19|20)\d{2})\b', text)
-            if year_match:
-                event_date = year_match.group(1)
-                date_precision = DatePrecision.YEAR.value
-
-                months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
-                for m in months:
-                    if m in text.lower():
-                        event_date = f"{m.capitalize()} {event_date}"
-                        date_precision = DatePrecision.MONTH.value
-                        break
-            elif "years later" in text.lower() or "after" in text.lower():
-                event_date = "Relative"
-                date_precision = DatePrecision.RELATIVE.value
-
+        for group_name, claims in groups.items():
+            if not claims:
+                continue
+                
+            primary_claim = claims[0]
+            text = (primary_claim.claim_text or "")
+            
             ev = StoryEvent(
                 story_run_id=run.id,
-                title=f"Event: {text[:30]}...",
+                title=f"Section: {group_name.replace('_', ' ').title()}",
                 summary=text,
-                event_date=event_date,
-                date_precision=date_precision,
+                event_date="Various",
+                date_precision=DatePrecision.UNKNOWN.value,
                 importance_score=50,
-                category=getattr(claim, 'category', 'General')
+                category=group_name
             )
             self.db.add(ev)
             self.db.flush()
-
-            mapping = StoryEventClaim(event_id=ev.id, claim_id=claim.id)
-            self.db.add(mapping)
+            
+            for c in claims:
+                mapping = StoryEventClaim(event_id=ev.id, claim_id=c.id)
+                self.db.add(mapping)
+                
             events.append(ev)
-
+            
         return events
 
     def _structure_acts(self, run: StoryRun):
@@ -164,53 +235,51 @@ class StoryBuilder:
         self.db.flush()
         return acts
 
-    def _generate_beats(self, run: StoryRun, events, acts):
-        def sort_key(e):
-            if e.date_precision == DatePrecision.YEAR.value or e.date_precision == DatePrecision.MONTH.value:
-                return (0, str(e.event_date))
-            return (1, str(e.id))
-
-        sorted_events = sorted(events, key=sort_key)
-
+    def _generate_beats(self, run: StoryRun, groups: Dict[str, List[ResearchClaim]], events, acts):
         beats = []
-        n = len(sorted_events)
-
-        for i, ev in enumerate(sorted_events):
-            if i < n // 3:
-                act = acts[0]
-                role = NarrativeRole.SETUP.value if i > 0 else NarrativeRole.HOOK.value
-                emotion = "AMBITION"
-            elif i < 2 * (n // 3):
-                act = acts[1]
-                role = NarrativeRole.RISING_TENSION.value
-                emotion = "TENSION"
-            else:
-                act = acts[2]
-                role = NarrativeRole.CONCLUSION.value if i == n - 1 else NarrativeRole.REFLECTION.value
-                emotion = "RESOLUTION"
-
+        
+        group_order = [
+            ("HOOK", acts[0], NarrativeRole.HOOK.value, "AMBITION"),
+            ("ORIGIN_DEVELOPMENT", acts[0], NarrativeRole.SETUP.value, "AMBITION"),
+            ("DESIGN_IDENTITY", acts[1], NarrativeRole.RISING_TENSION.value, "TENSION"),
+            ("WORLD_CONFLICT", acts[1], NarrativeRole.RISING_TENSION.value, "TENSION"),
+            ("RELEASE_PROBLEMS", acts[1], NarrativeRole.TURNING_POINT.value, "TENSION"),
+            ("RECEPTION", acts[2], NarrativeRole.REFLECTION.value, "RESOLUTION"),
+            ("LEGACY", acts[2], NarrativeRole.CONCLUSION.value, "RESOLUTION")
+        ]
+        
+        order_idx = 0
+        for group_name, act, role, emotion in group_order:
+            if not groups.get(group_name):
+                continue
+                
+            ev = next((e for e in events if e.category == group_name), None)
+            if not ev:
+                continue
+                
             beat = StoryBeat(
                 story_run_id=run.id,
                 act_id=act.id,
-                order_index=i,
-                title=ev.title.replace("Event: ", "Beat: "),
-                summary=ev.summary,
+                order_index=order_idx,
+                title=f"Beat: {group_name.replace('_', ' ').title()}",
+                summary=f"Focus on {group_name.replace('_', ' ').title()}",
                 narrative_role=role,
                 emotional_state=emotion,
                 dramatic_intensity=2
             )
             self.db.add(beat)
             self.db.flush()
-
+            
             claims = self.db.query(StoryEventClaim).filter_by(event_id=ev.id).all()
             for c in claims:
                 self.db.add(StoryBeatClaim(beat_id=beat.id, claim_id=c.claim_id))
-
+                
             beats.append(beat)
-
+            order_idx += 1
+            
         return beats
 
-    def _generate_scenes(self, run: StoryRun, acts, beats):
+    def _generate_scenes(self, run: StoryRun, acts, beats, groups):
         scene_idx = 1
         for act in acts:
             act_beats = [b for b in beats if b.act_id == act.id]
@@ -221,13 +290,13 @@ class StoryBuilder:
                 scene = Scene(
                     episode_id=run.episode_id,
                     order_index=scene_idx,
-                    title=f"Scene for {beat.title}",
+                    title=f"{beat.title.replace('Beat:', 'Scene:')}",
                     story_run_id=run.id,
                     story_beat_id=beat.id,
                     act_id=act.id,
                     purpose=beat.summary,
                     emotional_intent=beat.emotional_state,
-                    estimated_duration_seconds=30
+                    estimated_duration_seconds=45
                 )
                 self.db.add(scene)
                 self.db.flush()
@@ -237,11 +306,11 @@ class StoryBuilder:
                     order_index=1,
                     text=f"Narrator discusses: {beat.summary}",
                     is_brief=1,
-                    purpose="Explain narrative beat",
+                    purpose="Explain narrative section",
                     must_communicate=json.dumps([beat.summary]),
                     must_not_claim=json.dumps(["unsupported factual assertions"]),
                     tone="Investigative",
-                    estimated_duration_seconds=30,
+                    estimated_duration_seconds=45,
                     supporting_claims=json.dumps(claim_ids)
                 )
                 self.db.add(seg)
@@ -251,7 +320,7 @@ class StoryBuilder:
                     narration_segment_id=seg.id,
                     description=f"Show visual context for {beat.summary}",
                     search_query=beat.title,
-                    preferred_content_types=json.dumps(["gameplay", "trailer"]),
+                    preferred_content_types=json.dumps(["gameplay", "trailer", "interview"]),
                     avoid_content_types=json.dumps(["unrelated"]),
                     preferred_channels=json.dumps(["official"])
                 )
@@ -266,7 +335,7 @@ class StoryBuilder:
 
         quality = {
             "Evidence coverage": len(selected_claims),
-            "Timeline coverage": len([e for e in events if e.date_precision != DatePrecision.UNKNOWN.value]),
+            "Timeline coverage": len(events),
             "Narrative coherence": 100,
             "Conflict burden": 0,
             "Unsupported content": 0

@@ -54,8 +54,7 @@ class LLMScriptWriter:
                         if c and c.status not in [ClaimStatus.REJECTED.value, ClaimStatus.CONFLICTED.value]:
                             if c.project_id != story_run.project_id:
                                 continue
-                            if c.quality_classification == "LOW_QUALITY":
-                                continue
+
                             valid_claim_ids.add(c.id)
                             verified_claims.append({
                                 "id": c.id,

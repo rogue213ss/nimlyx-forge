@@ -501,8 +501,10 @@ def story_scenes(story_run_id):
 def script_build(story_run_id):
     from backend.database.db import get_db
     db = SessionLocal()
-    from backend.services.script.writer import ScriptWriter
-    writer = ScriptWriter(db)
+    from backend.services.script.llm_writer import LLMScriptWriter
+    from backend.services.llm.gemini_provider import GeminiProvider
+    provider = GeminiProvider()
+    writer = LLMScriptWriter(db, provider)
     script_id = writer.generate_script(story_run_id)
     click.echo(f"ScriptRun {script_id} generated successfully.")
 

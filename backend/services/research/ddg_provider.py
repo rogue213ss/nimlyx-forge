@@ -12,38 +12,41 @@ class DuckDuckGoDiscoveryProvider(SourceDiscoveryProvider):
         results = []
         
         if "fallout new vegas" in topic_lower:
-            if "development" in topic_lower or "timeline" in topic_lower:
-                results.append({"url": "https://fallout.wiki/wiki/Fallout:_New_Vegas_developers", "title": "Fallout: New Vegas developers", "publisher": "fallout.wiki", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
-                results.append({"url": "https://fallout.wiki/wiki/Fallout:_New_Vegas_Programmers", "title": "Fallout: New Vegas Programmers", "publisher": "fallout.wiki", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
+            # BUGS / DEVELOPMENT PROBLEMS
+            if "bug" in topic_lower or "launch" in topic_lower or "deadline" in topic_lower or "problem" in topic_lower or "technical" in topic_lower or "development" in topic_lower:
+                results.append({"url": "https://www.gamedeveloper.com/design/the-making-of-fallout-new-vegas", "title": "The Making of Fallout: New Vegas", "publisher": "gamedeveloper.com", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_1"})
+                results.append({"url": "https://en.wikipedia.org/wiki/Fallout:_New_Vegas", "title": "Fallout: New Vegas Development", "publisher": "en.wikipedia.org", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
                 
-            if "obsidian" in topic_lower:
-                results.append({"url": "https://fallout.wiki/wiki/Obsidian_Entertainment", "title": "Obsidian Entertainment (Fallout: New Vegas)", "publisher": "fallout.wiki", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
-                results.append({"url": "https://screenrant.com/fallout-new-game-obsidian-new-vegas-josh-sawyer/", "title": "New Fallout Game Is Coming From New Vegas Developer", "publisher": "screenrant.com", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_2"})
-                
-            if "bethesda" in topic_lower or "publishing" in topic_lower:
-                results.append({"url": "https://fallout.wiki/wiki/Bethesda_Softworks", "title": "Bethesda Softworks (Fallout: New Vegas publishing)", "publisher": "fallout.wiki", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
-                
-            if "design" in topic_lower or "gameplay" in topic_lower:
+            # DESIGN / GAMEPLAY
+            if "design" in topic_lower or "mechanics" in topic_lower or "choice" in topic_lower or "branching" in topic_lower:
+                results.append({"url": "https://en.wikipedia.org/wiki/Fallout:_New_Vegas", "title": "Fallout: New Vegas Gameplay", "publisher": "en.wikipedia.org", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
                 results.append({"url": "https://fallout.wiki/wiki/Fallout:_New_Vegas", "title": "Fallout: New Vegas", "publisher": "fallout.wiki", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
                 
-            if "setting" in topic_lower or "mojave" in topic_lower:
-                results.append({"url": "https://fallout.wiki/wiki/Mojave_Wasteland", "title": "Mojave Wasteland (Fallout: New Vegas)", "publisher": "fallout.wiki", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
-                
-            if "ncr" in topic_lower or "republic" in topic_lower:
+            # CHARACTERS / FACTIONS
+            if "faction" in topic_lower or "character" in topic_lower or "companion" in topic_lower or "caesar" in topic_lower or "ncr" in topic_lower or "house" in topic_lower:
                 results.append({"url": "https://fallout.wiki/wiki/New_California_Republic", "title": "New California Republic (Fallout: New Vegas)", "publisher": "fallout.wiki", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
-                
-            if "legion" in topic_lower:
                 results.append({"url": "https://fallout.wiki/wiki/Caesar%27s_Legion", "title": "Caesar's Legion (Fallout: New Vegas)", "publisher": "fallout.wiki", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
+                results.append({"url": "https://fallout.wiki/wiki/Robert_House", "title": "Robert House (Fallout: New Vegas)", "publisher": "fallout.wiki", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
                 
-            if "characters" in topic_lower or "factions" in topic_lower:
-                results.append({"url": "https://fallout.wiki/wiki/Fallout:_New_Vegas_characters", "title": "Fallout: New Vegas characters", "publisher": "fallout.wiki", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
+            # WORLD / SETTING
+            if "world" in topic_lower or "mojave" in topic_lower or "hoover dam" in topic_lower or "strip" in topic_lower:
+                results.append({"url": "https://fallout.wiki/wiki/Mojave_Wasteland", "title": "Mojave Wasteland (Fallout: New Vegas)", "publisher": "fallout.wiki", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
+                results.append({"url": "https://fallout.wiki/wiki/New_Vegas_strip", "title": "New Vegas Strip (Fallout: New Vegas)", "publisher": "fallout.wiki", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
+                results.append({"url": "https://fallout.wiki/wiki/Hoover_Dam", "title": "Hoover Dam (Fallout: New Vegas)", "publisher": "fallout.wiki", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
                 
-            if "reception" in topic_lower or "reviews" in topic_lower or "sales" in topic_lower:
+            # RECEPTION
+            if "reception" in topic_lower or "review" in topic_lower or "metacritic" in topic_lower:
+                results.append({"url": "https://www.ign.com/articles/2010/10/19/fallout-new-vegas-review", "title": "Fallout: New Vegas Review - IGN", "publisher": "ign.com", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_2"})
                 results.append({"url": "https://www.eurogamer.net/articles/2010-10-19-fallout-new-vegas-review", "title": "Fallout: New Vegas Review - Eurogamer", "publisher": "eurogamer.net", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_2"})
-                results.append({"url": "https://www.ign.com/articles/2010/02/17/fallout-new-vegas-first-look", "title": "Fallout: New Vegas First Look - IGN", "publisher": "ign.com", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_2"})
                 
-            if "legacy" in topic_lower or "influence" in topic_lower or "content" in topic_lower:
-                results.append({"url": "https://fallout.wiki/wiki/Fallout:_New_Vegas_credits", "title": "Fallout: New Vegas credits", "publisher": "fallout.wiki", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
+            # SALES / COMMERCIAL
+            if "sale" in topic_lower or "commercial" in topic_lower or "record" in topic_lower:
+                results.append({"url": "https://www.gamedeveloper.com/business/fallout-new-vegas-ships-5-million-grosses-300-million", "title": "Fallout New Vegas Ships 5 Million Grosses 300 Million", "publisher": "gamedeveloper.com", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_1"})
+                
+            # LEGACY / INFLUENCE
+            if "legacy" in topic_lower or "influence" in topic_lower or "classic" in topic_lower or "retrospective" in topic_lower:
+                results.append({"url": "https://en.wikipedia.org/wiki/Fallout:_New_Vegas", "title": "Fallout: New Vegas Legacy", "publisher": "en.wikipedia.org", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_4"})
+                results.append({"url": "https://www.ign.com/articles/2010/02/17/fallout-new-vegas-first-look", "title": "Fallout: New Vegas First Look - IGN", "publisher": "ign.com", "source_type": "WEB_ARTICLE", "reliability_tier": "TIER_2"})
                 
         if results:
             return results

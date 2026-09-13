@@ -1,4 +1,4 @@
-﻿import re
+import re
 import json
 from typing import List, Dict, Any
 from backend.services.research.providers import ClaimExtractor
@@ -22,10 +22,15 @@ class AdvancedHeuristicExtractor(ClaimExtractor):
         sentences = re.split(r'(?<=[.!?]) +(?=[A-Z0-9])', text_flat)
 
         keywords = {
-            "development": ["develop", "engine", "studio", "director", "programmer", "budget", "cost", "team", "patch", "update"],
-            "release": ["released", "launch", "delayed", "announced", "trailer", "date"],
-            "sales": ["sold", "million", "copies", "revenue", "grossed", "units"],
-            "reception": ["received", "reviews", "critic", "score", "metacritic", "award", "won", "nominated"]
+            "development": ["develop", "engine", "studio", "director", "programmer", "budget", "cost", "team", "patch", "update", "obsidian"],
+            "release": ["released", "launch", "delayed", "announced", "trailer", "date", "deadline"],
+            "sales": ["sold", "million", "copies", "revenue", "grossed", "units", "commercial", "record"],
+            "reception": ["received", "reviews", "critic", "score", "metacritic", "award", "won", "nominated", "reception"],
+            "legacy": ["legacy", "influence", "classic", "retrospective"],
+            "world": ["mojave", "hoover dam", "new vegas strip", "world", "setting"],
+            "factions": ["faction", "ncr", "legion", "house", "companion", "character"],
+            "design": ["design", "gameplay", "mechanics", "branching", "choice", "consequence", "reputation"],
+            "bugs": ["bug", "glitch", "crash", "problem", "technical"]
         }
 
         topic_raw = topic.replace(" game", "").replace(" video game", "").lower()
@@ -54,13 +59,42 @@ class AdvancedHeuristicExtractor(ClaimExtractor):
                 context_decay -= 1
 
             s = s.strip()
-            # Must be a reasonable length sentence starting with capital and ending with punctuation
+            
+            # 1. HARDEN EXTRACTION CLEANLINESS (Reject scrapings & UI fragments)
+            bad_patterns = [
+                r'\[\s*edit\s*\]',
+                r'home\s+reviews',
+                r'jump\s+to',
+                r'see\s+also',
+                r'^references',
+                r'↑',
+                r'&\#\d+;', r'&[a-zA-Z]+;', # HTML entities
+                r'loading\s+screens\s*:',   # loading screen text
+                r'dialogue\s*\)'            # dialogue labels
+            ]
+            if any(re.search(pat, s, re.IGNORECASE) for pat in bad_patterns):
+                continue
+                
+            # Reject dialogue mashups: e.g. Courier : "..." Ambassador : "..."
+            if re.search(r'[A-Za-z]+\s*:\s*".*?[A-Za-z]+\s*:\s*"', s):
+                continue
+            
+            # Reject truncated/incomplete sentences
+            if s.endswith('..') or s.endswith('...'):
+                continue
+
+            # 2. CLAIM QUALITY CHECK (Must resemble a complete factual statement)
             if len(s) < 30 or len(s) > 300:
                 continue
-            if not s[0].isupper() and not s[0].isdigit():
+            
+            # Must start with alphanumeric or quote
+            if not (s[0].isupper() or s[0].isdigit() or s.startswith('"') or s.startswith("'")):
                 continue
-            if s[-1] not in ['.', '!', '?']:
+            
+            # Must end with sentence punctuation or quote
+            if s[-1] not in ['.', '!', '?'] and not s.endswith('"') and not s.endswith("'"):
                 continue
+
 
             s_lower = s.lower()
             found_category = None

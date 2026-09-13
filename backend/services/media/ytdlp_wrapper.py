@@ -21,10 +21,11 @@ def download_video(url: str, output_path: str) -> None:
     if node_path == "node" and not shutil.which("node"):
         raise EnvironmentError("JavaScript runtime (node) not found. Forge requires node for yt-dlp to process YouTube signatures.")
 
+    import sys
     command = [
-        get_executable_path("yt-dlp"),
+        sys.executable, "-m", "yt_dlp",
         "--js-runtimes", f"node:{node_path}",
-        "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "-f", "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]/best",
         "-o", output_path,
         "--no-playlist",
         url

@@ -40,6 +40,7 @@ class LLMScriptWriter:
         self.db.commit()
 
         try:
+            previous_script = []
             scenes = self.db.query(Scene).filter_by(story_run_id=story_run_id).order_by(Scene.order_index).all()
             for scene in scenes:
                 segments = self.db.query(NarrationSegment).filter_by(scene_id=scene.id).order_by(NarrationSegment.order_index).all()
@@ -69,7 +70,8 @@ class LLMScriptWriter:
                         "story_context": f"Episode {story_run.episode_id}, Scene {scene.title}",
                         "narration_purpose": seg.purpose,
                         "must_not_claim": must_not_claim,
-                        "verified_claims": verified_claims
+                        "verified_claims": verified_claims,
+                        "previously_generated_text": " ".join(previous_script[-10:])
                     }
 
                     config = {
@@ -90,6 +92,8 @@ class LLMScriptWriter:
                         text = sent_data.get("text", "")
                         stype = sent_data.get("type", SentenceType.FACTUAL.value)
                         c_ids = sent_data.get("claim_ids", [])
+                        
+                        previous_script.append(text)
                         
                         review_status = ReviewStatus.DRAFT.value
                         

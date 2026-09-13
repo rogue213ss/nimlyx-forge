@@ -19,10 +19,16 @@ class AdvancedHeuristicExtractor(ClaimExtractor):
         text_clean = re.sub(r'\[citation needed\]', '', text_clean)
 
         text_flat = text_clean.replace('\n', ' ')
+        
+        # Replace section headings and boundaries with a period to enforce sentence splitting
+        text_flat = re.sub(r'\s*(=+[^=]+=+)\s*', r'. ', text_flat)
+        text_flat = re.sub(r'\s*-{3,}\s*', r'. ', text_flat)
+        text_flat = re.sub(r'\s*\[\s*edit\s*\]\s*', r'. ', text_flat)
+        
         sentences = re.split(r'(?<=[.!?]) +(?=[A-Z0-9])', text_flat)
 
         keywords = {
-            "development": ["develop", "engine", "studio", "director", "programmer", "budget", "cost", "team", "patch", "update", "obsidian"],
+            "development": ["develop", "engine", "studio", "director", "programmer", "budget", "cost", "team", "patch", "update", "obsidian", "audio", "soundtrack", "music", "compose", "composed"],
             "release": ["released", "launch", "delayed", "announced", "trailer", "date", "deadline"],
             "sales": ["sold", "million", "copies", "revenue", "grossed", "units", "commercial", "record"],
             "reception": ["received", "reviews", "critic", "score", "metacritic", "award", "won", "nominated", "reception"],
